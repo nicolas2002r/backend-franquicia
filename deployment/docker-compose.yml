@@ -1,0 +1,25 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: franquicia-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  app:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    container_name: franquicia-app
+    ports:
+      - "8080:8080"
+    environment:
+      #SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/franchisesdb
+      SPRING_MONGODB_URI: mongodb://mongo:27017/franchisesdb
+      JAVA_TOOL_OPTIONS: "--enable-native-access=ALL-UNNAMED -XX:MaxRAMPercentage=70"
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:

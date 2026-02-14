@@ -11,8 +11,11 @@ spring:
       path: "/h2"
   profiles:
     include: null
+  data:
+    #mongodb:
+     # uri: ${SPRING_DATA_MONGODB_URI:mongodb://mongo:27017/franchisesdb}
   mongodb:
-    uri: "mongodb://localhost:27017/franchisesdb"
+    uri: ${SPRING_MONGODB_URI:${SPRING_DATA_MONGODB_URI:mongodb://mongo:27017/franchisesdb}}
 management:
   endpoints:
     web:
