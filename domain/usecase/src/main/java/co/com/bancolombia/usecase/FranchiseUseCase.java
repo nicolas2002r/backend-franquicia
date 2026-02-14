@@ -21,6 +21,10 @@ public class FranchiseUseCase {
     private final ProductRepository productRepository;
     private final AuditLogger auditLogger;
 
+    public static final String NO_SUCURSAL = "No se encontró sucursal para franquicia";
+    public static final String PRODUCTO_NO_ENCONTRADO = "Producto no encontrado en la sucursal";
+    public static final String FRANQUICIA_NO_ENCONTRADA = "Franquicia no encontrada: ";
+
     public FranchiseUseCase(
             FranchiseRepository franchiseRepository,
             BranchRepository branchRepository,
@@ -70,7 +74,7 @@ public class FranchiseUseCase {
                                 ? Mono.error(new ConflictException("Franchise name already exists"))
                                 : Mono.just(n)))
                 .flatMap(n -> franchiseRepository.updateName(franchiseId, n)
-                        .switchIfEmpty(Mono.error(new NotFoundException("Franchise not found: " + franchiseId))))
+                        .switchIfEmpty(Mono.error(new NotFoundException(FRANQUICIA_NO_ENCONTRADA + franchiseId))))
                 .doOnNext(f -> auditLogger.info("onNext updateFranchiseName id=" + f.id()).subscribe())
                 .doOnError(e -> auditLogger.error("onError updateFranchiseName", e).subscribe())
                 .doFinally(sig -> auditLogger.info("onComplete updateFranchiseName signal=" + sig).subscribe());
@@ -83,7 +87,7 @@ public class FranchiseUseCase {
                 .filter(n -> !n.isEmpty())
                 .switchIfEmpty(Mono.error(new ValidationException("Branch name is required")))
                 .flatMap(n -> franchiseRepository.findById(franchiseId)
-                        .switchIfEmpty(Mono.error(new NotFoundException("Franchise not found: " + franchiseId)))
+                        .switchIfEmpty(Mono.error(new NotFoundException(FRANQUICIA_NO_ENCONTRADA + franchiseId)))
                         .thenReturn(n))
                 .flatMap(n -> branchRepository.save(new Branch(null, franchiseId, n)))
                 .doOnNext(b -> auditLogger.info("onNext addBranch id=" + b.id()).subscribe())
@@ -98,7 +102,7 @@ public class FranchiseUseCase {
                 .filter(n -> !n.isEmpty())
                 .switchIfEmpty(Mono.error(new ValidationException("Branch name is required")))
                 .flatMap(n -> branchRepository.updateName(branchId, franchiseId, n)
-                        .switchIfEmpty(Mono.error(new NotFoundException("Branch not found for franchise"))))
+                        .switchIfEmpty(Mono.error(new NotFoundException(NO_SUCURSAL))))
                 .doOnNext(b -> auditLogger.info("onNext updateBranchName id=" + b.id()).subscribe())
                 .doOnError(e -> auditLogger.error("onError updateBranchName", e).subscribe())
                 .doFinally(sig -> auditLogger.info("onComplete updateBranchName signal=" + sig).subscribe());
@@ -113,7 +117,7 @@ public class FranchiseUseCase {
                 .filter(n -> !n.isEmpty())
                 .switchIfEmpty(Mono.error(new ValidationException("Product name is required")))
                 .flatMap(n -> branchRepository.findByIdAndFranchiseId(branchId, franchiseId)
-                        .switchIfEmpty(Mono.error(new NotFoundException("Branch not found for franchise")))
+                        .switchIfEmpty(Mono.error(new NotFoundException(NO_SUCURSAL)))
                         .thenReturn(n))
                 .flatMap(n -> productRepository.save(new Product(null, branchId, n, stock)))
                 .doOnNext(p -> auditLogger.info("onNext addProduct id=" + p.id()).subscribe())
@@ -124,9 +128,9 @@ public class FranchiseUseCase {
     //eliminar producto
     public Mono<Void> deleteProduct(String franchiseId, String branchId, String productId) {
         return branchRepository.findByIdAndFranchiseId(branchId, franchiseId)
-                .switchIfEmpty(Mono.error(new NotFoundException("Branch not found for franchise")))
+                .switchIfEmpty(Mono.error(new NotFoundException(NO_SUCURSAL)))
                 .flatMap(b -> productRepository.findByIdAndBranchId(productId, branchId)
-                        .switchIfEmpty(Mono.error(new NotFoundException("Product not found in branch"))))
+                        .switchIfEmpty(Mono.error(new NotFoundException(PRODUCTO_NO_ENCONTRADO))))
                 .flatMap(p -> productRepository.deleteByIdAndBranchId(productId, branchId))
                 .doOnSuccess(v -> auditLogger.info("onComplete deleteProduct productId=" + productId).subscribe())
                 .doOnError(e -> auditLogger.error("onError deleteProduct", e).subscribe());
@@ -137,9 +141,9 @@ public class FranchiseUseCase {
         if (newStock < 0) return Mono.error(new ValidationException("Stock cannot be negative"));
 
         return branchRepository.findByIdAndFranchiseId(branchId, franchiseId)
-                .switchIfEmpty(Mono.error(new NotFoundException("Branch not found for franchise")))
+                .switchIfEmpty(Mono.error(new NotFoundException(NO_SUCURSAL)))
                 .flatMap(b -> productRepository.findByIdAndBranchId(productId, branchId)
-                        .switchIfEmpty(Mono.error(new NotFoundException("Product not found in branch"))))
+                        .switchIfEmpty(Mono.error(new NotFoundException(PRODUCTO_NO_ENCONTRADO))))
                 .map(p -> new Product(p.id(), p.branchId(), p.name(), newStock))
                 .flatMap(productRepository::save)
                 .doOnNext(p -> auditLogger.info("onNext updateProductStock productId=" + p.id() + " stock=" + p.stock()).subscribe())
@@ -154,10 +158,10 @@ public class FranchiseUseCase {
                 .filter(n -> !n.isEmpty())
                 .switchIfEmpty(Mono.error(new ValidationException("Product name is required")))
                 .flatMap(n -> branchRepository.findByIdAndFranchiseId(branchId, franchiseId)
-                        .switchIfEmpty(Mono.error(new NotFoundException("Branch not found for franchise")))
+                        .switchIfEmpty(Mono.error(new NotFoundException(NO_SUCURSAL)))
                         .thenReturn(n))
                 .flatMap(n -> productRepository.findByIdAndBranchId(productId, branchId)
-                        .switchIfEmpty(Mono.error(new NotFoundException("Product not found in branch")))
+                        .switchIfEmpty(Mono.error(new NotFoundException(PRODUCTO_NO_ENCONTRADO)))
                         .map(p -> new Product(p.id(), p.branchId(), n, p.stock())))
                 .flatMap(productRepository::save)
                 .doOnNext(p -> auditLogger.info("onNext updateProductName productId=" + p.id() + " name=" + p.name()).subscribe())
@@ -168,7 +172,7 @@ public class FranchiseUseCase {
     // máximo stock por sucursal
     public Flux<MaxStockByBranch> getMaxStockByBranch(String franchiseId) {
         return franchiseRepository.findById(franchiseId)
-                .switchIfEmpty(Mono.error(new NotFoundException("Franchise not found: " + franchiseId)))
+                .switchIfEmpty(Mono.error(new NotFoundException(FRANQUICIA_NO_ENCONTRADA + franchiseId)))
                 .flatMapMany(f -> branchRepository.findByFranchiseId(franchiseId))
                 .switchIfEmpty(Flux.error(new NotFoundException("No branches for franchise: " + franchiseId)))
                 .flatMap(branch ->

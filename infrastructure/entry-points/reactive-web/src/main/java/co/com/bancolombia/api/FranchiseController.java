@@ -6,7 +6,8 @@ import co.com.bancolombia.model.Franchise;
 import co.com.bancolombia.model.MaxStockByBranch;
 import co.com.bancolombia.model.Product;
 import co.com.bancolombia.usecase.FranchiseUseCase;
-import org.springframework.http.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -23,9 +24,14 @@ public class FranchiseController {
         this.useCase = useCase;
     }
 
-    public record CreateNameRequest(String name) {}
-    public record CreateProductRequest(String name,int stock) {}
-    public record UpdateStockRequest(int stock) {}
+    public record CreateNameRequest(String name) {
+    }
+
+    public record CreateProductRequest(String name, int stock) {
+    }
+
+    public record UpdateStockRequest(int stock) {
+    }
 
     //crear franquicia
     @PostMapping("/franchises")
