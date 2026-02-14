@@ -1,11 +1,8 @@
 # IntelliJ IDEA
-
 .idea/
 *.iml
 *.iws
 out/
-
-# Java
 
 # Compiled class files
 *.class
@@ -13,27 +10,21 @@ out/
 # Log files
 *.log
 
-# BlueJ files
-*.ctxt
-
 # Package files
 *.jar
 *.war
 *.ear
 
-# Maven
-target/
-pom.xml.tag
-pom.xml.releaseBackup
-pom.xml.versionsBackup
-pom.xml.next
-release.properties
-dependency-reduced-pom.xml
-buildNumber.properties
-
 # Gradle
 .gradle/
 build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Gradle cache
+.gradle-cache/
+
+# Dependency lock (NO ignorar si usas dependency locking)
+# gradle.lockfile   <-- déjalo versionado si existe
 
 # OS FILES
 
@@ -44,5 +35,4 @@ build/
 Thumbs.db
 
 # Environment
-
 .env
