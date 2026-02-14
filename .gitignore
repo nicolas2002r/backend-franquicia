@@ -22,7 +22,7 @@ build/
 
 # Gradle cache
 .gradle-cache/
-
+build-cache/
 # Dependency lock (NO ignorar si usas dependency locking)
 # gradle.lockfile   <-- déjalo versionado si existe
 

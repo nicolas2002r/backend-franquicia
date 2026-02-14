@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
 public class MongoConfig {
 
     @Bean
-    public MongoDBSecret dbSecret(@Value("${spring.data.mongodb.uri}") String uri) {
+    public MongoDBSecret dbSecret(@Value("${spring.mongodb.uri}") String uri) {
         return MongoDBSecret.builder()
                 .uri(uri)
                 .build();
