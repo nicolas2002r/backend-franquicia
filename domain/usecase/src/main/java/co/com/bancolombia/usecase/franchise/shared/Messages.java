@@ -2,7 +2,9 @@ package co.com.bancolombia.usecase.franchise.shared;
 
 
 public final class Messages {
-    private Messages() {}
+    private Messages() {
+        throw new UnsupportedOperationException("Utility class");
+    }
 
     public static final String NO_SUCURSAL = "No se encontró sucursal para franquicia";
     public static final String PRODUCTO_NO_ENCONTRADO = "Producto no encontrado en la sucursal";
