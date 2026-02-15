@@ -1,4 +1,4 @@
-package co.com.bancolombia.api;
+package co.com.bancolombia.api.exception;
 
 import co.com.bancolombia.model.exception.ConflictException;
 import co.com.bancolombia.model.exception.NotFoundException;

@@ -1,4 +1,4 @@
-package co.com.bancolombia.api;
+package co.com.bancolombia.api.logger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
