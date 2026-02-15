@@ -119,7 +119,7 @@ class CreateFranchiseCommandTest {
         verifyNoMoreInteractions(franchiseRepository);
 
         verify(auditLogger).error(eq("onError createFranchise"), any(ConflictException.class));
-        verify(auditLogger, never()).info(anyString()); // no internal AUDIT event because it happens after save
+        verify(auditLogger, never()).info(anyString());
         verifyNoMoreInteractions(auditLogger);
     }
 }
