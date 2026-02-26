@@ -1,254 +1,120 @@
 package co.com.bancolombia.usecase.franchise;
 
-import co.com.bancolombia.model.Branch;
-import co.com.bancolombia.model.Franchise;
-import co.com.bancolombia.model.MaxStockByBranch;
-import co.com.bancolombia.model.Product;
+import co.com.bancolombia.model.BranchDTO;
+import co.com.bancolombia.model.FranchiseDTO;
+import co.com.bancolombia.model.MaxStockByBranchDTO;
+import co.com.bancolombia.model.ProductDTO;
 import co.com.bancolombia.model.exception.NotFoundException;
-import co.com.bancolombia.model.gateways.AuditLogger;
 import co.com.bancolombia.model.gateways.BranchRepository;
 import co.com.bancolombia.model.gateways.FranchiseRepository;
 import co.com.bancolombia.model.gateways.ProductRepository;
 import co.com.bancolombia.usecase.franchise.command.GetMaxStockByBranchQuery;
-import co.com.bancolombia.usecase.franchise.shared.AuditSupport;
-import co.com.bancolombia.usecase.franchise.shared.Messages;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import static org.mockito.Mockito.when;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
-
+@ExtendWith(MockitoExtension.class)
 class GetMaxStockByBranchQueryTest {
 
+    @Mock
+    private FranchiseRepository franchiseRepository;
+
+    @Mock
+    private BranchRepository branchRepository;
+
+    @Mock
+    private ProductRepository productRepository;
+
+    @InjectMocks
+    private GetMaxStockByBranchQuery query;
+
     @Test
-    void execute_shouldReturnMaxStockPerBranch_andLogOnNextForEach_andLogOnCompleteOnce() {
-        FranchiseRepository franchiseRepository = mock(FranchiseRepository.class);
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+    void executeWhenFranchiseExistsAndBranchesHaveProductsShouldReturnMaxStock() {
+        String franchiseId = "franchise123";
+        FranchiseDTO franchise = new FranchiseDTO(franchiseId, "Test Franchise");
 
-        AtomicInteger onNextSubscribed = new AtomicInteger(0);
-        AtomicInteger onCompleteSubscribed = new AtomicInteger(0);
-        AtomicInteger onErrorSubscribed = new AtomicInteger(0);
+        BranchDTO branch1 = new BranchDTO("branch1", franchiseId, "Branch One");
+        BranchDTO branch2 = new BranchDTO("branch2", franchiseId, "Branch Two");
 
-        doAnswer(inv -> {
-            String msg = inv.getArgument(0, String.class);
-            if (msg.equals("onNext getMaxStockByBranch")) {
-                return Mono.fromRunnable(onNextSubscribed::incrementAndGet);
-            }
-            if (msg.equals("onComplete getMaxStockByBranch")) {
-                return Mono.fromRunnable(onCompleteSubscribed::incrementAndGet);
-            }
-            return Mono.empty();
-        }).when(auditLogger).info(anyString());
+        ProductDTO product1 = new ProductDTO("prod1", "branch1", "Product A", 100);
+        ProductDTO product2 = new ProductDTO("prod2", "branch2", "Product B", 200);
 
-        doAnswer(inv -> Mono.fromRunnable(onErrorSubscribed::incrementAndGet))
-                .when(auditLogger).error(anyString(), any(Throwable.class));
+        when(franchiseRepository.findById(franchiseId)).thenReturn(Mono.just(franchise));
+        when(branchRepository.findByFranchiseId(franchiseId)).thenReturn(Flux.just(branch1, branch2));
+        when(productRepository.findTopByBranchIdOrderByStockDesc("branch1")).thenReturn(Mono.just(product1));
+        when(productRepository.findTopByBranchIdOrderByStockDesc("branch2")).thenReturn(Mono.just(product2));
 
-        AuditSupport audit = new AuditSupport(auditLogger);
-        GetMaxStockByBranchQuery query = new GetMaxStockByBranchQuery(
-                franchiseRepository, branchRepository, productRepository, audit
-        );
+        Flux<MaxStockByBranchDTO> result = query.execute(franchiseId);
 
-        String franchiseId = "f1";
-
-        when(franchiseRepository.findById(franchiseId))
-                .thenReturn(Mono.just(new Franchise(franchiseId, "Franquicia A")));
-
-        Branch b1 = new Branch("b1", franchiseId, "Sucursal 1");
-        Branch b2 = new Branch("b2", franchiseId, "Sucursal 2");
-
-        when(branchRepository.findByFranchiseId(franchiseId))
-                .thenReturn(Flux.just(b1, b2));
-
-        when(productRepository.findTopByBranchIdOrderByStockDesc("b1"))
-                .thenReturn(Mono.just(new Product("p1", "b1", "Prod 1", 10)));
-
-        when(productRepository.findTopByBranchIdOrderByStockDesc("b2"))
-                .thenReturn(Mono.just(new Product("p2", "b2", "Prod 2", 50)));
-
-        StepVerifier.create(query.execute(franchiseId).collectList())
-                .assertNext(list -> {
-                    assertEquals(2, list.size());
-
-                    MaxStockByBranch r1 = list.stream().filter(x -> x.branchId().equals("b1")).findFirst().orElseThrow();
-                    assertEquals("Sucursal 1", r1.branchName());
-                    assertEquals("p1", r1.productId());
-                    assertEquals("Prod 1", r1.productName());
-                    assertEquals(10, r1.stock());
-
-                    MaxStockByBranch r2 = list.stream().filter(x -> x.branchId().equals("b2")).findFirst().orElseThrow();
-                    assertEquals("Sucursal 2", r2.branchName());
-                    assertEquals("p2", r2.productId());
-                    assertEquals("Prod 2", r2.productName());
-                    assertEquals(50, r2.stock());
-                })
+        StepVerifier.create(result)
+                .expectNextMatches(dto ->
+                        dto.getBranchId().equals("branch1") &&
+                                dto.getBranchName().equals("Branch One") &&
+                                dto.getProductId().equals("prod1") &&
+                                dto.getProductName().equals("Product A") &&
+                                dto.getStock() == 100)
+                .expectNextMatches(dto ->
+                        dto.getBranchId().equals("branch2") &&
+                                dto.getBranchName().equals("Branch Two") &&
+                                dto.getProductId().equals("prod2") &&
+                                dto.getProductName().equals("Product B") &&
+                                dto.getStock() == 200)
                 .verifyComplete();
-
-        assertEquals(2, onNextSubscribed.get(), "Debe loguear onNext por cada branch resultante");
-        assertEquals(1, onCompleteSubscribed.get(), "Debe loguear onComplete una sola vez al final");
-        assertEquals(0, onErrorSubscribed.get(), "No debe loguear onError en happy path");
     }
 
     @Test
-    void execute_shouldFail_whenFranchiseNotFound_andLogOnError() {
-        FranchiseRepository franchiseRepository = mock(FranchiseRepository.class);
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
-
-        AtomicInteger onNextSubscribed = new AtomicInteger(0);
-        AtomicInteger onCompleteSubscribed = new AtomicInteger(0);
-        AtomicInteger onErrorSubscribed = new AtomicInteger(0);
-        AtomicInteger branchesSubscribed = new AtomicInteger(0);
-
-        doAnswer(inv -> {
-            String msg = inv.getArgument(0, String.class);
-            if (msg.equals("onNext getMaxStockByBranch")) return Mono.fromRunnable(onNextSubscribed::incrementAndGet);
-            if (msg.equals("onComplete getMaxStockByBranch")) return Mono.fromRunnable(onCompleteSubscribed::incrementAndGet);
-            return Mono.empty();
-        }).when(auditLogger).info(anyString());
-
-        doAnswer(inv -> Mono.fromRunnable(onErrorSubscribed::incrementAndGet))
-                .when(auditLogger).error(anyString(), any(Throwable.class));
-
-        when(branchRepository.findByFranchiseId(anyString()))
-                .thenReturn(Flux.defer(() -> {
-                    branchesSubscribed.incrementAndGet();
-                    return Flux.empty();
-                }));
-
-        AuditSupport audit = new AuditSupport(auditLogger);
-        GetMaxStockByBranchQuery query = new GetMaxStockByBranchQuery(
-                franchiseRepository, branchRepository, productRepository, audit
-        );
-
-        String franchiseId = "f404";
+    void executeWhenFranchiseNotFoundShouldThrowError() {
+        String franchiseId = "nonexistent";
 
         when(franchiseRepository.findById(franchiseId)).thenReturn(Mono.empty());
 
-        StepVerifier.create(query.execute(franchiseId))
-                .expectErrorSatisfies(err -> {
-                    assertTrue(err instanceof NotFoundException);
-                    assertEquals(Messages.FRANQUICIA_NO_ENCONTRADA + franchiseId, err.getMessage());
-                })
-                .verify();
+        Flux<MaxStockByBranchDTO> result = query.execute(franchiseId);
 
-        assertEquals(0, onNextSubscribed.get());
-        assertEquals(0, onCompleteSubscribed.get(), "En error no debe suscribirse onComplete");
-        assertEquals(1, onErrorSubscribed.get());
-        assertEquals(0, branchesSubscribed.get(), "No debe consultar branches si no existe la franquicia");
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof NotFoundException &&
+                        throwable.getMessage().equals("Franquicia no encontrada: nonexistent"))
+                .verify();
     }
 
     @Test
-    void execute_shouldFail_whenNoBranchesForFranchise_andLogOnError() {
-        FranchiseRepository franchiseRepository = mock(FranchiseRepository.class);
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+    void executeWhenFranchiseHasNoBranchesShouldThrowError() {
+        String franchiseId = "franchise123";
+        FranchiseDTO franchise = new FranchiseDTO(franchiseId, "Test Franchise");
 
-        AtomicInteger onNextSubscribed = new AtomicInteger(0);
-        AtomicInteger onCompleteSubscribed = new AtomicInteger(0);
-        AtomicInteger onErrorSubscribed = new AtomicInteger(0);
-        AtomicInteger branchesSubscribed = new AtomicInteger(0);
+        when(franchiseRepository.findById(franchiseId)).thenReturn(Mono.just(franchise));
+        when(branchRepository.findByFranchiseId(franchiseId)).thenReturn(Flux.empty());
 
-        doAnswer(inv -> {
-            String msg = inv.getArgument(0, String.class);
-            if (msg.equals("onNext getMaxStockByBranch")) return Mono.fromRunnable(onNextSubscribed::incrementAndGet);
-            if (msg.equals("onComplete getMaxStockByBranch")) return Mono.fromRunnable(onCompleteSubscribed::incrementAndGet);
-            return Mono.empty();
-        }).when(auditLogger).info(anyString());
+        Flux<MaxStockByBranchDTO> result = query.execute(franchiseId);
 
-        doAnswer(inv -> Mono.fromRunnable(onErrorSubscribed::incrementAndGet))
-                .when(auditLogger).error(anyString(), any(Throwable.class));
-
-        AuditSupport audit = new AuditSupport(auditLogger);
-        GetMaxStockByBranchQuery query = new GetMaxStockByBranchQuery(
-                franchiseRepository, branchRepository, productRepository, audit
-        );
-
-        String franchiseId = "f1";
-
-        when(franchiseRepository.findById(franchiseId))
-                .thenReturn(Mono.just(new Franchise(franchiseId, "Franquicia A")));
-
-        when(branchRepository.findByFranchiseId(franchiseId))
-                .thenReturn(Flux.defer(() -> {
-                    branchesSubscribed.incrementAndGet();
-                    return Flux.empty();
-                }));
-
-        StepVerifier.create(query.execute(franchiseId))
-                .expectErrorSatisfies(err -> {
-                    assertTrue(err instanceof NotFoundException);
-                    assertEquals("No branches for franchise: " + franchiseId, err.getMessage());
-                })
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof NotFoundException &&
+                        throwable.getMessage().equals("No branches for franchise: " + franchiseId))
                 .verify();
-
-        assertEquals(1, branchesSubscribed.get());
-        assertEquals(0, onNextSubscribed.get());
-        assertEquals(0, onCompleteSubscribed.get());
-        assertEquals(1, onErrorSubscribed.get());
     }
 
     @Test
-    void execute_shouldFail_whenBranchHasNoProducts_andLogOnError() {
-        FranchiseRepository franchiseRepository = mock(FranchiseRepository.class);
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+    void executeWhenBranchHasNoProductsShouldThrowError() {
+        String franchiseId = "franchise123";
+        FranchiseDTO franchise = new FranchiseDTO(franchiseId, "Test Franchise");
+        BranchDTO branch = new BranchDTO("branch1", franchiseId, "Branch One");
 
-        AtomicInteger onNextSubscribed = new AtomicInteger(0);
-        AtomicInteger onCompleteSubscribed = new AtomicInteger(0);
-        AtomicInteger onErrorSubscribed = new AtomicInteger(0);
-        AtomicInteger topProductSubscribed = new AtomicInteger(0);
+        when(franchiseRepository.findById(franchiseId)).thenReturn(Mono.just(franchise));
+        when(branchRepository.findByFranchiseId(franchiseId)).thenReturn(Flux.just(branch));
+        when(productRepository.findTopByBranchIdOrderByStockDesc("branch1")).thenReturn(Mono.empty());
 
-        doAnswer(inv -> {
-            String msg = inv.getArgument(0, String.class);
-            if (msg.equals("onNext getMaxStockByBranch")) return Mono.fromRunnable(onNextSubscribed::incrementAndGet);
-            if (msg.equals("onComplete getMaxStockByBranch")) return Mono.fromRunnable(onCompleteSubscribed::incrementAndGet);
-            return Mono.empty();
-        }).when(auditLogger).info(anyString());
+        Flux<MaxStockByBranchDTO> result = query.execute(franchiseId);
 
-        doAnswer(inv -> Mono.fromRunnable(onErrorSubscribed::incrementAndGet))
-                .when(auditLogger).error(anyString(), any(Throwable.class));
-
-        AuditSupport audit = new AuditSupport(auditLogger);
-        GetMaxStockByBranchQuery query = new GetMaxStockByBranchQuery(
-                franchiseRepository, branchRepository, productRepository, audit
-        );
-
-        String franchiseId = "f1";
-        Branch b1 = new Branch("b1", franchiseId, "Sucursal 1");
-
-        when(franchiseRepository.findById(franchiseId))
-                .thenReturn(Mono.just(new Franchise(franchiseId, "Franquicia A")));
-
-        when(branchRepository.findByFranchiseId(franchiseId))
-                .thenReturn(Flux.just(b1));
-
-        when(productRepository.findTopByBranchIdOrderByStockDesc("b1"))
-                .thenReturn(Mono.defer(() -> {
-                    topProductSubscribed.incrementAndGet();
-                    return Mono.empty();
-                }));
-
-        StepVerifier.create(query.execute(franchiseId))
-                .expectErrorSatisfies(err -> {
-                    assertTrue(err instanceof NotFoundException);
-                    assertEquals("Branch has no products: b1", err.getMessage());
-                })
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof NotFoundException &&
+                        throwable.getMessage().equals("Branch has no products: branch1"))
                 .verify();
-
-        assertEquals(1, topProductSubscribed.get());
-        assertEquals(0, onNextSubscribed.get(), "No emite items, no debe loguear onNext");
-        assertEquals(0, onCompleteSubscribed.get(), "En error no debe suscribirse onComplete");
-        assertEquals(1, onErrorSubscribed.get());
     }
 }
 

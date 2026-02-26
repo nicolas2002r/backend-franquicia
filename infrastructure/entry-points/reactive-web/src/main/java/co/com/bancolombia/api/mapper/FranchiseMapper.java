@@ -1,34 +1,38 @@
 package co.com.bancolombia.api.mapper;
 
 import co.com.bancolombia.api.model.RequestRecords;
-import co.com.bancolombia.model.Branch;
-import co.com.bancolombia.model.Franchise;
-import co.com.bancolombia.model.MaxStockByBranch;
-import co.com.bancolombia.model.Product;
+import co.com.bancolombia.model.BranchDTO;
+import co.com.bancolombia.model.FranchiseDTO;
+import co.com.bancolombia.model.MaxStockByBranchDTO;
+import co.com.bancolombia.model.ProductDTO;
 
 public class FranchiseMapper {
 
     private FranchiseMapper() {}
 
-    public static RequestRecords.FranchiseResponse toResponse(Franchise f) {
-        return new RequestRecords.FranchiseResponse(f.id(), f.name());
+    // Mapeo de FranchiseDTO a FranchiseResponse
+    public static RequestRecords.FranchiseResponse toResponse(FranchiseDTO franchise) {
+        return new RequestRecords.FranchiseResponse(franchise.getId(), franchise.getName());
     }
 
-    public static RequestRecords.BranchResponse toResponse(Branch b) {
-        return new RequestRecords.BranchResponse(b.id(), b.franchiseId(), b.name());
+    // Mapeo de BranchDTO a BranchResponse
+    public static RequestRecords.BranchResponse toResponse(BranchDTO branch) {
+        return new RequestRecords.BranchResponse(branch.getId(), branch.getFranchiseId(), branch.getName());
     }
 
-    public static RequestRecords.ProductResponse toResponse(Product p) {
-        return new RequestRecords.ProductResponse(p.id(), p.branchId(), p.name(), p.stock());
+    // Mapeo de ProductDTO a ProductResponse
+    public static RequestRecords.ProductResponse toResponse(ProductDTO product) {
+        return new RequestRecords.ProductResponse(product.getId(), product.getBranchId(), product.getName(), product.getStock());
     }
 
-    public static RequestRecords.MaxStockByBranchResponse toResponse(MaxStockByBranch x) {
+    // Mapeo de MaxStockByBranchDTO a MaxStockByBranchResponse
+    public static RequestRecords.MaxStockByBranchResponse toResponse(MaxStockByBranchDTO maxStock) {
         return new RequestRecords.MaxStockByBranchResponse(
-                x.branchId(),
-                x.branchName(),
-                x.productId(),
-                x.productName(),
-                x.stock()
+                maxStock.getBranchId(),
+                maxStock.getBranchName(),
+                maxStock.getProductId(),
+                maxStock.getProductName(),
+                maxStock.getStock()
         );
     }
 }

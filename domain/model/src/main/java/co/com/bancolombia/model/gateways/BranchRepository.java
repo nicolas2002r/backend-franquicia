@@ -1,12 +1,12 @@
 package co.com.bancolombia.model.gateways;
 
-import co.com.bancolombia.model.Branch;
+import co.com.bancolombia.model.BranchDTO;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface BranchRepository {
-    Mono<Branch> save(Branch branch);
-    Mono<Branch> findByIdAndFranchiseId(String branchId, String franchiseId);
-    Flux<Branch> findByFranchiseId(String franchiseId);
-    Mono<Branch> updateName(String branchId, String franchiseId, String newName);
+    Mono<BranchDTO> save(BranchDTO branch);
+    Mono<BranchDTO> findByIdAndFranchiseId(String branchId, String franchiseId);
+    Flux<BranchDTO> findByFranchiseId(String franchiseId);
+    Mono<BranchDTO> updateName(String branchId, String franchiseId, String newName);
 }

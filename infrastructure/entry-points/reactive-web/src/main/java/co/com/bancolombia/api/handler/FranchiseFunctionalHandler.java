@@ -20,18 +20,21 @@ public class FranchiseFunctionalHandler {
 
     private final FranchiseUseCase useCase;
     private final Validator validator;
+    private final ErrorHandler errorHandler;
 
-
-    public FranchiseFunctionalHandler(FranchiseUseCase useCase, Validator validator) {
+    public FranchiseFunctionalHandler(FranchiseUseCase useCase, Validator validator, ErrorHandler errorHandler) {
         this.useCase = useCase;
         this.validator = validator;
+        this.errorHandler = errorHandler;
     }
 
+    // Metodo para leer y validar el cuerpo de la solicitud
     private <T> Mono<T> readAndValidate(ServerRequest request, Class<T> clazz) {
         return request.bodyToMono(clazz)
                 .flatMap(this::validate);
     }
 
+    // Metodo para validar el DTO
     private <T> Mono<T> validate(T dto) {
         Set<ConstraintViolation<T>> violations = validator.validate(dto);
         if (violations == null || violations.isEmpty()) return Mono.just(dto);
@@ -42,16 +45,24 @@ public class FranchiseFunctionalHandler {
         return Mono.error(new ValidationException(msg));
     }
 
-    // Endpoints
+    // Error handling utility
+    private Mono<ServerResponse> handleError(Throwable throwable) {
+        return errorHandler.handleError(throwable);
+    }
+
+
+    // Crear una nueva franquicia
     public Mono<ServerResponse> createFranchise(ServerRequest request) {
         return readAndValidate(request, RequestRecords.CreateNameRequest.class)
                 .flatMap(r -> useCase.createFranchise(r.name()))
                 .map(FranchiseMapper::toResponse)
                 .flatMap(body -> ServerResponse.status(201)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(body));
+                        .bodyValue(body))
+                .onErrorResume(this::handleError);  
     }
 
+    // Cambiar el nombre de una franquicia
     public Mono<ServerResponse> renameFranchise(ServerRequest request) {
         String franchiseId = request.pathVariable("franchiseId");
         return readAndValidate(request, RequestRecords.CreateNameRequest.class)
@@ -59,9 +70,11 @@ public class FranchiseFunctionalHandler {
                 .map(FranchiseMapper::toResponse)
                 .flatMap(body -> ServerResponse.ok()
                         .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(body));
+                        .bodyValue(body))
+                .onErrorResume(this::handleError);  
     }
 
+    // Agregar una nueva sucursal
     public Mono<ServerResponse> addBranch(ServerRequest request) {
         String franchiseId = request.pathVariable("franchiseId");
         return readAndValidate(request, RequestRecords.CreateNameRequest.class)
@@ -69,9 +82,11 @@ public class FranchiseFunctionalHandler {
                 .map(FranchiseMapper::toResponse)
                 .flatMap(body -> ServerResponse.status(201)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(body));
+                        .bodyValue(body))
+                .onErrorResume(this::handleError);  
     }
 
+    // Cambiar el nombre de una sucursal
     public Mono<ServerResponse> renameBranch(ServerRequest request) {
         String franchiseId = request.pathVariable("franchiseId");
         String branchId = request.pathVariable("branchId");
@@ -81,9 +96,11 @@ public class FranchiseFunctionalHandler {
                 .map(FranchiseMapper::toResponse)
                 .flatMap(body -> ServerResponse.ok()
                         .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(body));
+                        .bodyValue(body))
+                .onErrorResume(this::handleError);  
     }
 
+    // Agregar un nuevo producto
     public Mono<ServerResponse> addProduct(ServerRequest request) {
         String franchiseId = request.pathVariable("franchiseId");
         String branchId = request.pathVariable("branchId");
@@ -93,18 +110,22 @@ public class FranchiseFunctionalHandler {
                 .map(FranchiseMapper::toResponse)
                 .flatMap(body -> ServerResponse.status(201)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(body));
+                        .bodyValue(body))
+                .onErrorResume(this::handleError);  
     }
 
+    // Eliminar un producto
     public Mono<ServerResponse> deleteProduct(ServerRequest request) {
         String franchiseId = request.pathVariable("franchiseId");
         String branchId = request.pathVariable("branchId");
         String productId = request.pathVariable("productId");
 
         return useCase.deleteProduct(franchiseId, branchId, productId)
-                .then(ServerResponse.noContent().build());
+                .then(ServerResponse.noContent().build())
+                .onErrorResume(this::handleError);  
     }
 
+    // Actualizar el stock de un producto
     public Mono<ServerResponse> updateStock(ServerRequest request) {
         String franchiseId = request.pathVariable("franchiseId");
         String branchId = request.pathVariable("branchId");
@@ -115,9 +136,11 @@ public class FranchiseFunctionalHandler {
                 .map(FranchiseMapper::toResponse)
                 .flatMap(body -> ServerResponse.ok()
                         .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(body));
+                        .bodyValue(body))
+                .onErrorResume(this::handleError);  
     }
 
+    // Cambiar el nombre de un producto
     public Mono<ServerResponse> renameProduct(ServerRequest request) {
         String franchiseId = request.pathVariable("franchiseId");
         String branchId = request.pathVariable("branchId");
@@ -128,17 +151,20 @@ public class FranchiseFunctionalHandler {
                 .map(FranchiseMapper::toResponse)
                 .flatMap(body -> ServerResponse.ok()
                         .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(body));
+                        .bodyValue(body))
+                .onErrorResume(this::handleError);  
     }
 
+    // Obtener el stock máximo por sucursal
     public Mono<ServerResponse> maxStock(ServerRequest request) {
         String franchiseId = request.pathVariable("franchiseId");
 
-        return ServerResponse.ok()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(useCase.getMaxStockByBranch(franchiseId).map(FranchiseMapper::toResponse),
-                        RequestRecords.MaxStockByBranchResponse.class);
+        return useCase.getMaxStockByBranch(franchiseId)
+                .map(FranchiseMapper::toResponse)
+                .collectList()
+                .flatMap(responses -> ServerResponse.ok()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(responses))
+                .onErrorResume(this::handleError);
     }
 }
-
-

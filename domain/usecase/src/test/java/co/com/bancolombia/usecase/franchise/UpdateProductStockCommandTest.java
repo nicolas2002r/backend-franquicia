@@ -6,7 +6,7 @@ import co.com.bancolombia.model.exception.NotFoundException;
 import co.com.bancolombia.model.exception.ValidationException;
 import co.com.bancolombia.model.gateways.BranchRepository;
 import co.com.bancolombia.model.gateways.ProductRepository;
-import co.com.bancolombia.usecase.franchise.command.UpdateProductNameCommand;
+import co.com.bancolombia.usecase.franchise.command.UpdateProductStockCommand;
 import co.com.bancolombia.usecase.franchise.shared.Messages;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,10 +17,11 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class UpdateProductNameCommandTest {
+class UpdateProductStockCommandTest {
 
     @Mock
     private BranchRepository branchRepository;
@@ -29,49 +30,44 @@ class UpdateProductNameCommandTest {
     private ProductRepository productRepository;
 
     @InjectMocks
-    private UpdateProductNameCommand command;
+    private UpdateProductStockCommand command;
 
     @Test
-    void executeWithValidDataShouldUpdateProductName() {
+    void executeWithValidDataShouldUpdateProductStock() {
         String franchiseId = "franchise123";
         String branchId = "branch456";
         String productId = "product789";
-        String newName = "Updated Product";
+        int newStock = 100;
 
         BranchDTO branch = new BranchDTO(branchId, franchiseId, "Branch Name");
-        ProductDTO existingProduct = new ProductDTO(productId, branchId, "Old Product", 50);
-        ProductDTO updatedProduct = new ProductDTO(productId, branchId, newName, 50);
+        ProductDTO existingProduct = new ProductDTO(productId, branchId, "Product", 50);
+        ProductDTO updatedProduct = new ProductDTO(productId, branchId, "Product", newStock);
 
         when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.just(branch));
         when(productRepository.findByIdAndBranchId(productId, branchId)).thenReturn(Mono.just(existingProduct));
         when(productRepository.save(any(ProductDTO.class))).thenReturn(Mono.just(updatedProduct));
 
-        StepVerifier.create(command.execute(franchiseId, branchId, productId, newName))
+        StepVerifier.create(command.execute(franchiseId, branchId, productId, newStock))
                 .expectNext(updatedProduct)
                 .verifyComplete();
     }
 
     @Test
-    void executeWithNullNameShouldThrowValidationException() {
+    void executeWithNegativeStockShouldThrowValidationException() {
         String franchiseId = "franchise123";
         String branchId = "branch456";
         String productId = "product789";
+        int newStock = -5;
 
-        StepVerifier.create(command.execute(franchiseId, branchId, productId, null))
+        // Stubs para evitar NPE en caso de que la validación no falle (aunque debería)
+        when(branchRepository.findByIdAndFranchiseId(anyString(), anyString()))
+                .thenReturn(Mono.just(new BranchDTO(branchId, franchiseId, "Branch")));
+        when(productRepository.findByIdAndBranchId(anyString(), anyString()))
+                .thenReturn(Mono.just(new ProductDTO(productId, branchId, "Product", 10)));
+
+        StepVerifier.create(command.execute(franchiseId, branchId, productId, newStock))
                 .expectErrorMatches(throwable -> throwable instanceof ValidationException &&
-                        throwable.getMessage().equals(Messages.PRODUCT_NAME_REQUIRED))
-                .verify();
-    }
-
-    @Test
-    void executeWithEmptyNameShouldThrowValidationException() {
-        String franchiseId = "franchise123";
-        String branchId = "branch456";
-        String productId = "product789";
-
-        StepVerifier.create(command.execute(franchiseId, branchId, productId, "   "))
-                .expectErrorMatches(throwable -> throwable instanceof ValidationException &&
-                        throwable.getMessage().equals(Messages.PRODUCT_NAME_REQUIRED))
+                        throwable.getMessage().equals(Messages.STOCK_NEGATIVE))
                 .verify();
     }
 
@@ -80,11 +76,13 @@ class UpdateProductNameCommandTest {
         String franchiseId = "franchise123";
         String branchId = "nonexistent";
         String productId = "product789";
-        String newName = "Updated Product";
+        int newStock = 100;
 
         when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.empty());
+        // Stub para product por si acaso (aunque no debería llegar)
+        when(productRepository.findByIdAndBranchId(anyString(), anyString())).thenReturn(Mono.empty());
 
-        StepVerifier.create(command.execute(franchiseId, branchId, productId, newName))
+        StepVerifier.create(command.execute(franchiseId, branchId, productId, newStock))
                 .expectErrorMatches(throwable -> throwable instanceof NotFoundException &&
                         throwable.getMessage().equals("No se encontró sucursal para franquicia"))
                 .verify();
@@ -95,17 +93,16 @@ class UpdateProductNameCommandTest {
         String franchiseId = "franchise123";
         String branchId = "branch456";
         String productId = "nonexistent";
-        String newName = "Updated Product";
+        int newStock = 100;
 
         BranchDTO branch = new BranchDTO(branchId, franchiseId, "Branch Name");
 
         when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.just(branch));
         when(productRepository.findByIdAndBranchId(productId, branchId)).thenReturn(Mono.empty());
 
-        StepVerifier.create(command.execute(franchiseId, branchId, productId, newName))
+        StepVerifier.create(command.execute(franchiseId, branchId, productId, newStock))
                 .expectErrorMatches(throwable -> throwable instanceof NotFoundException &&
                         throwable.getMessage().equals("Producto no encontrado en la sucursal"))
                 .verify();
     }
 }
-

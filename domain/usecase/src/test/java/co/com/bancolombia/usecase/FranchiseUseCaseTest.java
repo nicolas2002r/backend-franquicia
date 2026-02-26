@@ -1,97 +1,195 @@
 package co.com.bancolombia.usecase;
 
-import co.com.bancolombia.model.Branch;
-import co.com.bancolombia.model.Franchise;
-import co.com.bancolombia.model.MaxStockByBranch;
-import co.com.bancolombia.model.Product;
-import co.com.bancolombia.model.gateways.AuditLogger;
+import co.com.bancolombia.model.BranchDTO;
+import co.com.bancolombia.model.FranchiseDTO;
+import co.com.bancolombia.model.MaxStockByBranchDTO;
+import co.com.bancolombia.model.ProductDTO;
 import co.com.bancolombia.model.gateways.BranchRepository;
 import co.com.bancolombia.model.gateways.FranchiseRepository;
 import co.com.bancolombia.model.gateways.ProductRepository;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-import org.reactivestreams.Publisher;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class FranchiseUseCaseTest {
 
-    private static <T> T mockReactive(Class<T> type) {
-        return Mockito.mock(type, invocation -> {
-            Class<?> rt = invocation.getMethod().getReturnType();
+    @Mock
+    private FranchiseRepository franchiseRepository;
 
-            if (rt.equals(Mono.class)) return Mono.empty();
-            if (rt.equals(Flux.class)) return Flux.empty();
-            if (Publisher.class.isAssignableFrom(rt)) return Flux.empty();
+    @Mock
+    private BranchRepository branchRepository;
 
-            if (rt.equals(boolean.class)) return false;
-            if (rt.equals(int.class)) return 0;
-            if (rt.equals(long.class)) return 0L;
-            if (rt.equals(double.class)) return 0D;
-            if (rt.equals(float.class)) return 0F;
-            if (rt.equals(short.class)) return (short) 0;
-            if (rt.equals(byte.class)) return (byte) 0;
-            if (rt.equals(char.class)) return (char) 0;
+    @Mock
+    private ProductRepository productRepository;
 
-            return null;
-        });
+    @InjectMocks
+    private FranchiseUseCase useCase;
+
+    @Test
+    void createFranchiseShouldReturnSavedFranchise() {
+        String name = "New Franchise";
+        FranchiseDTO saved = new FranchiseDTO("id123", name);
+
+        when(franchiseRepository.existsByName(name)).thenReturn(Mono.just(false));
+        when(franchiseRepository.save(any(FranchiseDTO.class))).thenReturn(Mono.just(saved));
+
+        StepVerifier.create(useCase.createFranchise(name))
+                .expectNext(saved)
+                .verifyComplete();
     }
 
     @Test
-    void shouldConstructAndExposeAllOperationsAsReactiveTypes() {
-        FranchiseRepository franchiseRepository = mockReactive(FranchiseRepository.class);
-        BranchRepository branchRepository = mockReactive(BranchRepository.class);
-        ProductRepository productRepository = mockReactive(ProductRepository.class);
-        AuditLogger auditLogger = mockReactive(AuditLogger.class);
+    void updateFranchiseNameShouldReturnUpdatedFranchise() {
+        String franchiseId = "franchise123";
+        String newName = "Updated Name";
+        FranchiseDTO updated = new FranchiseDTO(franchiseId, newName);
 
-        FranchiseUseCase useCase = assertDoesNotThrow(() ->
-                new FranchiseUseCase(franchiseRepository, branchRepository, productRepository, auditLogger)
-        );
-        assertNotNull(useCase);
+        when(franchiseRepository.existsByName(newName)).thenReturn(Mono.just(false));
+        when(franchiseRepository.updateName(franchiseId, newName)).thenReturn(Mono.just(updated));
 
-        Mono<Franchise> createFranchise = assertDoesNotThrow(() -> useCase.createFranchise("Franquicia A"));
-        assertNotNull(createFranchise);
+        StepVerifier.create(useCase.updateFranchiseName(franchiseId, newName))
+                .expectNext(updated)
+                .verifyComplete();
+    }
 
-        Mono<Franchise> renameFranchise = assertDoesNotThrow(() ->
-                useCase.updateFranchiseName("franchiseId", "Nuevo Nombre")
-        );
-        assertNotNull(renameFranchise);
+    @Test
+    void addBranchShouldReturnSavedBranch() {
+        String franchiseId = "franchise123";
+        String branchName = "New Branch";
+        FranchiseDTO franchise = new FranchiseDTO(franchiseId, "Franchise");
+        BranchDTO saved = new BranchDTO("branch456", franchiseId, branchName);
 
-        Mono<Branch> addBranch = assertDoesNotThrow(() ->
-                useCase.addBranch("franchiseId", "Sucursal 1")
-        );
-        assertNotNull(addBranch);
+        when(franchiseRepository.findById(franchiseId)).thenReturn(Mono.just(franchise));
+        when(branchRepository.save(any(BranchDTO.class))).thenReturn(Mono.just(saved));
 
-        Mono<Branch> renameBranch = assertDoesNotThrow(() ->
-                useCase.updateBranchName("franchiseId", "branchId", "Sucursal Renombrada")
-        );
-        assertNotNull(renameBranch);
+        StepVerifier.create(useCase.addBranch(franchiseId, branchName))
+                .expectNext(saved)
+                .verifyComplete();
+    }
 
-        Mono<Product> addProduct = assertDoesNotThrow(() ->
-                useCase.addProduct("franchiseId", "branchId", "Producto 1", 10)
-        );
-        assertNotNull(addProduct);
+    @Test
+    void updateBranchNameShouldReturnUpdatedBranch() {
+        String franchiseId = "franchise123";
+        String branchId = "branch456";
+        String newName = "Updated Branch";
+        BranchDTO updated = new BranchDTO(branchId, franchiseId, newName);
 
-        Mono<Void> deleteProduct = assertDoesNotThrow(() ->
-                useCase.deleteProduct("franchiseId", "branchId", "productId")
-        );
-        assertNotNull(deleteProduct);
+        when(branchRepository.updateName(branchId, franchiseId, newName)).thenReturn(Mono.just(updated));
 
-        Mono<Product> updateStock = assertDoesNotThrow(() ->
-                useCase.updateProductStock("franchiseId", "branchId", "productId", 99)
-        );
-        assertNotNull(updateStock);
+        StepVerifier.create(useCase.updateBranchName(franchiseId, branchId, newName))
+                .expectNext(updated)
+                .verifyComplete();
+    }
 
-        Mono<Product> renameProduct = assertDoesNotThrow(() ->
-                useCase.updateProductName("franchiseId", "branchId", "productId", "Producto Renombrado")
-        );
-        assertNotNull(renameProduct);
+    @Test
+    void addProductShouldReturnSavedProduct() {
+        String franchiseId = "franchise123";
+        String branchId = "branch456";
+        String productName = "New Product";
+        int stock = 10;
+        BranchDTO branch = new BranchDTO(branchId, franchiseId, "Branch");
+        ProductDTO saved = new ProductDTO("product789", branchId, productName, stock);
 
-        Flux<MaxStockByBranch> maxStock = assertDoesNotThrow(() ->
-                useCase.getMaxStockByBranch("franchiseId")
-        );
-        assertNotNull(maxStock);
+        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.just(branch));
+        when(productRepository.save(any(ProductDTO.class))).thenReturn(Mono.just(saved));
+
+        StepVerifier.create(useCase.addProduct(franchiseId, branchId, productName, stock))
+                .expectNext(saved)
+                .verifyComplete();
+    }
+
+    @Test
+    void deleteProductShouldComplete() {
+        String franchiseId = "franchise123";
+        String branchId = "branch456";
+        String productId = "product789";
+        BranchDTO branch = new BranchDTO(branchId, franchiseId, "Branch");
+        ProductDTO product = new ProductDTO(productId, branchId, "Product", 5);
+
+        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.just(branch));
+        when(productRepository.findByIdAndBranchId(productId, branchId)).thenReturn(Mono.just(product));
+        when(productRepository.deleteByIdAndBranchId(productId, branchId)).thenReturn(Mono.empty());
+
+        StepVerifier.create(useCase.deleteProduct(franchiseId, branchId, productId))
+                .verifyComplete();
+    }
+
+    @Test
+    void updateProductStockShouldReturnUpdatedProduct() {
+        String franchiseId = "franchise123";
+        String branchId = "branch456";
+        String productId = "product789";
+        int newStock = 20;
+        BranchDTO branch = new BranchDTO(branchId, franchiseId, "Branch");
+        ProductDTO existing = new ProductDTO(productId, branchId, "Product", 10);
+        ProductDTO updated = new ProductDTO(productId, branchId, "Product", newStock);
+
+        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.just(branch));
+        when(productRepository.findByIdAndBranchId(productId, branchId)).thenReturn(Mono.just(existing));
+        when(productRepository.save(any(ProductDTO.class))).thenReturn(Mono.just(updated));
+
+        StepVerifier.create(useCase.updateProductStock(franchiseId, branchId, productId, newStock))
+                .expectNext(updated)
+                .verifyComplete();
+    }
+
+    @Test
+    void updateProductNameShouldReturnUpdatedProduct() {
+        String franchiseId = "franchise123";
+        String branchId = "branch456";
+        String productId = "product789";
+        String newName = "Updated Product";
+        BranchDTO branch = new BranchDTO(branchId, franchiseId, "Branch");
+        ProductDTO existing = new ProductDTO(productId, branchId, "Old", 15);
+        ProductDTO updated = new ProductDTO(productId, branchId, newName, 15);
+
+        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.just(branch));
+        when(productRepository.findByIdAndBranchId(productId, branchId)).thenReturn(Mono.just(existing));
+        when(productRepository.save(any(ProductDTO.class))).thenReturn(Mono.just(updated));
+
+        StepVerifier.create(useCase.updateProductName(franchiseId, branchId, productId, newName))
+                .expectNext(updated)
+                .verifyComplete();
+    }
+
+    @Test
+    void getMaxStockByBranchShouldReturnFlux() {
+        String franchiseId = "franchise123";
+        FranchiseDTO franchise = new FranchiseDTO(franchiseId, "Franchise");
+        BranchDTO branch1 = new BranchDTO("branch1", franchiseId, "Branch One");
+        BranchDTO branch2 = new BranchDTO("branch2", franchiseId, "Branch Two");
+        ProductDTO product1 = new ProductDTO("prod1", "branch1", "Product A", 100);
+        ProductDTO product2 = new ProductDTO("prod2", "branch2", "Product B", 200);
+        MaxStockByBranchDTO dto1 = new MaxStockByBranchDTO();
+        dto1.setBranchId("branch1");
+        dto1.setBranchName("Branch One");
+        dto1.setProductId("prod1");
+        dto1.setProductName("Product A");
+        dto1.setStock(100);
+        MaxStockByBranchDTO dto2 = new MaxStockByBranchDTO();
+        dto2.setBranchId("branch2");
+        dto2.setBranchName("Branch Two");
+        dto2.setProductId("prod2");
+        dto2.setProductName("Product B");
+        dto2.setStock(200);
+
+        when(franchiseRepository.findById(franchiseId)).thenReturn(Mono.just(franchise));
+        when(branchRepository.findByFranchiseId(franchiseId)).thenReturn(Flux.just(branch1, branch2));
+        when(productRepository.findTopByBranchIdOrderByStockDesc("branch1")).thenReturn(Mono.just(product1));
+        when(productRepository.findTopByBranchIdOrderByStockDesc("branch2")).thenReturn(Mono.just(product2));
+
+        StepVerifier.create(useCase.getMaxStockByBranch(franchiseId))
+                .expectNextMatches(d -> d.getBranchId().equals("branch1") && d.getStock() == 100)
+                .expectNextMatches(d -> d.getBranchId().equals("branch2") && d.getStock() == 200)
+                .verifyComplete();
     }
 }

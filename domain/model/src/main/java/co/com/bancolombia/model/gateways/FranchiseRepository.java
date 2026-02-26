@@ -1,11 +1,11 @@
 package co.com.bancolombia.model.gateways;
 
-import co.com.bancolombia.model.Franchise;
+import co.com.bancolombia.model.FranchiseDTO;
 import reactor.core.publisher.Mono;
 
 public interface FranchiseRepository {
-    Mono<Franchise> save(Franchise franchise);
-    Mono<Franchise> findById(String id);
+    Mono<FranchiseDTO> save(FranchiseDTO franchise);
+    Mono<FranchiseDTO> findById(String id);
     Mono<Boolean> existsByName(String name);
-    Mono<Franchise> updateName(String id, String newName);
+    Mono<FranchiseDTO> updateName(String id, String newName);
 }

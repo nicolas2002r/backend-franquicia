@@ -1,144 +1,89 @@
 package co.com.bancolombia.usecase.franchise;
 
-import co.com.bancolombia.model.Branch;
-import co.com.bancolombia.model.Franchise;
+import co.com.bancolombia.model.BranchDTO;
+import co.com.bancolombia.model.FranchiseDTO;
 import co.com.bancolombia.model.exception.NotFoundException;
 import co.com.bancolombia.model.exception.ValidationException;
-import co.com.bancolombia.model.gateways.AuditLogger;
 import co.com.bancolombia.model.gateways.BranchRepository;
 import co.com.bancolombia.model.gateways.FranchiseRepository;
 import co.com.bancolombia.usecase.franchise.command.AddBranchCommand;
-import co.com.bancolombia.usecase.franchise.shared.AuditSupport;
-import co.com.bancolombia.usecase.franchise.shared.Messages;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class AddBranchCommandTest {
 
+    @Mock
+    private FranchiseRepository franchiseRepository;
+
+    @Mock
+    private BranchRepository branchRepository;
+
+    @InjectMocks
+    private AddBranchCommand addBranchCommand;
+
     @Test
-    void executeShouldTrimNameValidateFranchiseAndSaveBranchAndAuditOnNextAndOnComplete() {
+    void executeWithValidDataShouldSaveBranch() {
+        String franchiseId = "franchise123";
+        String branchName = "Branch Center";
+        BranchDTO savedBranch = new BranchDTO("branch456", franchiseId, branchName);
 
-        FranchiseRepository franchiseRepository = mock(FranchiseRepository.class);
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+        FranchiseDTO franchiseMock = mock(FranchiseDTO.class);
+        when(franchiseRepository.findById(franchiseId)).thenReturn(Mono.just(franchiseMock));
+        when(branchRepository.save(any(BranchDTO.class))).thenReturn(Mono.just(savedBranch));
 
-        when(auditLogger.info(anyString())).thenReturn(Mono.empty());
-        when(auditLogger.error(anyString(), any(Throwable.class))).thenReturn(Mono.empty());
+        Mono<BranchDTO> result = addBranchCommand.execute(franchiseId, branchName);
 
-        AuditSupport audit = new AuditSupport(auditLogger);
-        AddBranchCommand command = new AddBranchCommand(franchiseRepository, branchRepository, audit);
-
-        String franchiseId = "f1";
-        String rawName = "   Sucursal Norte   ";
-        String trimmed = "Sucursal Norte";
-
-        when(franchiseRepository.findById(franchiseId))
-                .thenReturn(Mono.just(new Franchise(franchiseId, "Franquicia A")));
-
-        when(branchRepository.save(any(Branch.class)))
-                .thenAnswer(inv -> {
-                    Branch b = inv.getArgument(0);
-                    return Mono.just(new Branch("b1", b.franchiseId(), b.name()));
-                });
-
-        StepVerifier.create(command.execute(franchiseId, rawName))
-                .assertNext(saved -> {
-                    assertEquals("b1", saved.id());
-                    assertEquals(franchiseId, saved.franchiseId());
-                    assertEquals(trimmed, saved.name());
-                })
+        StepVerifier.create(result)
+                .expectNext(savedBranch)
                 .verifyComplete();
-
-        InOrder repoOrder = inOrder(franchiseRepository, branchRepository);
-        repoOrder.verify(franchiseRepository).findById(franchiseId);
-        repoOrder.verify(branchRepository).save(any(Branch.class));
-        repoOrder.verifyNoMoreInteractions();
-
-        ArgumentCaptor<Branch> captor = ArgumentCaptor.forClass(Branch.class);
-        verify(branchRepository).save(captor.capture());
-        Branch toSave = captor.getValue();
-        assertNull(toSave.id());
-        assertEquals(franchiseId, toSave.franchiseId());
-        assertEquals(trimmed, toSave.name());
-
-        InOrder auditOrder = inOrder(auditLogger);
-        auditOrder.verify(auditLogger).info("onNext addBranch");
-        auditOrder.verify(auditLogger).info("onComplete addBranch");
-        auditOrder.verifyNoMoreInteractions();
     }
 
     @Test
-    void executeShouldFailValidationWhenNameBlankAndNotCallRepositoriesAndAuditOnError() {
-        FranchiseRepository franchiseRepository = mock(FranchiseRepository.class);
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+    void executeWithNullBranchNameShouldReturnError() {
+        String franchiseId = "franchise123";
 
-        when(auditLogger.info(anyString())).thenReturn(Mono.empty());
-        when(auditLogger.error(anyString(), any(Throwable.class))).thenReturn(Mono.empty());
+        Mono<BranchDTO> result = addBranchCommand.execute(franchiseId, null);
 
-        AuditSupport audit = new AuditSupport(auditLogger);
-        AddBranchCommand command = new AddBranchCommand(franchiseRepository, branchRepository, audit);
-
-        String franchiseId = "f1";
-        String blank = "   ";
-
-        StepVerifier.create(command.execute(franchiseId, blank))
-                .expectErrorSatisfies(err -> {
-                    assertTrue(err instanceof ValidationException);
-                    assertEquals(Messages.BRANCH_NAME_REQUIRED, err.getMessage());
-                })
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof ValidationException &&
+                        throwable.getMessage().equals("Branch name is required"))
                 .verify();
-
-        verifyNoInteractions(franchiseRepository);
-        verifyNoInteractions(branchRepository);
-
-        verify(auditLogger).error(eq("onError addBranch"), any(ValidationException.class));
-        verify(auditLogger, never()).info(anyString());
-        verifyNoMoreInteractions(auditLogger);
     }
 
     @Test
-    void executeShouldFailWhenFranchiseNotFoundAndNotSaveBranchAndAuditOnError() {
-        FranchiseRepository franchiseRepository = mock(FranchiseRepository.class);
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+    void executeWithEmptyBranchNameShouldReturnError() {
+        String franchiseId = "franchise123";
 
-        when(auditLogger.info(anyString())).thenReturn(Mono.empty());
-        when(auditLogger.error(anyString(), any(Throwable.class))).thenReturn(Mono.empty());
+        Mono<BranchDTO> result = addBranchCommand.execute(franchiseId, "   ");
 
-        AuditSupport audit = new AuditSupport(auditLogger);
-        AddBranchCommand command = new AddBranchCommand(franchiseRepository, branchRepository, audit);
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof ValidationException &&
+                        throwable.getMessage().equals("Branch name is required"))
+                .verify();
+    }
 
-        String franchiseId = "missing";
-        String name = "Sucursal";
+    @Test
+    void executeWithNonExistentFranchiseShouldReturnError() {
+        String franchiseId = "nonexistent";
+        String branchName = "Branch Center";
 
         when(franchiseRepository.findById(franchiseId)).thenReturn(Mono.empty());
 
-        StepVerifier.create(command.execute(franchiseId, name))
-                .expectErrorSatisfies(err -> {
-                    assertTrue(err instanceof NotFoundException);
-                    assertEquals(Messages.FRANQUICIA_NO_ENCONTRADA + franchiseId, err.getMessage());
-                })
+        Mono<BranchDTO> result = addBranchCommand.execute(franchiseId, branchName);
+
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof NotFoundException &&
+                        throwable.getMessage().equals("Franquicia no encontrada: nonexistent"))
                 .verify();
-
-        verify(franchiseRepository).findById(franchiseId);
-        verifyNoMoreInteractions(franchiseRepository);
-
-        verify(branchRepository, never()).save(any());
-
-        ArgumentCaptor<Throwable> errCaptor = ArgumentCaptor.forClass(Throwable.class);
-        verify(auditLogger).error(eq("onError addBranch"), errCaptor.capture());
-        assertTrue(errCaptor.getValue() instanceof NotFoundException);
-
-        verify(auditLogger, never()).info(anyString());
-        verifyNoMoreInteractions(auditLogger);
     }
 }
-

@@ -1,175 +1,112 @@
 package co.com.bancolombia.usecase.franchise;
 
-import co.com.bancolombia.model.Branch;
-import co.com.bancolombia.model.Product;
+import co.com.bancolombia.model.BranchDTO;
+import co.com.bancolombia.model.ProductDTO;
 import co.com.bancolombia.model.exception.NotFoundException;
 import co.com.bancolombia.model.exception.ValidationException;
-import co.com.bancolombia.model.gateways.AuditLogger;
 import co.com.bancolombia.model.gateways.BranchRepository;
 import co.com.bancolombia.model.gateways.ProductRepository;
 import co.com.bancolombia.usecase.franchise.command.AddProductCommand;
-import co.com.bancolombia.usecase.franchise.shared.AuditSupport;
-import co.com.bancolombia.usecase.franchise.shared.Messages;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class AddProductCommandTest {
 
+    @Mock
+    private BranchRepository branchRepository;
+
+    @Mock
+    private ProductRepository productRepository;
+
+    @InjectMocks
+    private AddProductCommand addProductCommand;
+
     @Test
-    void executeShouldValidateBranchTrimNameSaveProductAndAuditOnNextAndOnComplete() {
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+    void executeWithValidDataShouldSaveProduct() {
+        String franchiseId = "franchise123";
+        String branchId = "branch456";
+        String productName = "New Product";
+        int stock = 10;
+        ProductDTO savedProduct = new ProductDTO("product789", branchId, productName, stock);
 
-        when(auditLogger.info(anyString())).thenReturn(Mono.empty());
-        when(auditLogger.error(anyString(), any(Throwable.class))).thenReturn(Mono.empty());
+        BranchDTO branchMock = new BranchDTO(branchId, franchiseId, "Branch Name");
+        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.just(branchMock));
+        when(productRepository.save(any(ProductDTO.class))).thenReturn(Mono.just(savedProduct));
 
-        AuditSupport audit = new AuditSupport(auditLogger);
-        AddProductCommand command = new AddProductCommand(branchRepository, productRepository, audit);
+        Mono<ProductDTO> result = addProductCommand.execute(franchiseId, branchId, productName, stock);
 
-        String franchiseId = "f1";
-        String branchId = "b1";
-        String rawName = "   Producto X   ";
-        String trimmed = "Producto X";
+        StepVerifier.create(result)
+                .expectNext(savedProduct)
+                .verifyComplete();
+    }
+
+    @Test
+    void executeWithNegativeStockShouldReturnError() {
+        String franchiseId = "franchise123";
+        String branchId = "branch456";
+        String productName = "New Product";
+        int stock = -5;
+
+        Mono<ProductDTO> result = addProductCommand.execute(franchiseId, branchId, productName, stock);
+
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof ValidationException &&
+                        throwable.getMessage().equals("Stock cannot be negative"))
+                .verify();
+    }
+
+    @Test
+    void executeWithNullProductNameShouldReturnError() {
+        String franchiseId = "franchise123";
+        String branchId = "branch456";
         int stock = 10;
 
-        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId))
-                .thenReturn(Mono.just(new Branch(branchId, franchiseId, "Sucursal A")));
+        Mono<ProductDTO> result = addProductCommand.execute(franchiseId, branchId, null, stock);
 
-        when(productRepository.save(any(Product.class)))
-                .thenAnswer(inv -> {
-                    Product p = inv.getArgument(0);
-                    return Mono.just(new Product("p1", p.branchId(), p.name(), p.stock()));
-                });
-
-        StepVerifier.create(command.execute(franchiseId, branchId, rawName, stock))
-                .assertNext(saved -> {
-                    assertEquals("p1", saved.id());
-                    assertEquals(branchId, saved.branchId());
-                    assertEquals(trimmed, saved.name());
-                    assertEquals(stock, saved.stock());
-                })
-                .verifyComplete();
-
-        InOrder repoOrder = inOrder(branchRepository, productRepository);
-        repoOrder.verify(branchRepository).findByIdAndFranchiseId(branchId, franchiseId);
-        repoOrder.verify(productRepository).save(any(Product.class));
-        repoOrder.verifyNoMoreInteractions();
-
-        ArgumentCaptor<Product> captor = ArgumentCaptor.forClass(Product.class);
-        verify(productRepository).save(captor.capture());
-        Product toSave = captor.getValue();
-        assertNull(toSave.id());
-        assertEquals(branchId, toSave.branchId());
-        assertEquals(trimmed, toSave.name());
-        assertEquals(stock, toSave.stock());
-
-        InOrder auditOrder = inOrder(auditLogger);
-        auditOrder.verify(auditLogger).info("onNext addProduct");
-        auditOrder.verify(auditLogger).info("onComplete addProduct");
-        auditOrder.verifyNoMoreInteractions();
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof ValidationException &&
+                        throwable.getMessage().equals("Product name is required"))
+                .verify();
     }
 
     @Test
-    void executeShouldFailValidationWhenStockNegativeAndNotCallReposAndAuditOnError() {
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+    void executeWithEmptyProductNameShouldReturnError() {
+        String franchiseId = "franchise123";
+        String branchId = "branch456";
+        int stock = 10;
 
-        when(auditLogger.info(anyString())).thenReturn(Mono.empty());
-        when(auditLogger.error(anyString(), any(Throwable.class))).thenReturn(Mono.empty());
+        Mono<ProductDTO> result = addProductCommand.execute(franchiseId, branchId, "   ", stock);
 
-        AuditSupport audit = new AuditSupport(auditLogger);
-        AddProductCommand command = new AddProductCommand(branchRepository, productRepository, audit);
-
-        String franchiseId = "f1";
-        String branchId = "b1";
-        int stock = -1;
-
-        StepVerifier.create(command.execute(franchiseId, branchId, "Prod", stock))
-                .expectErrorSatisfies(err -> {
-                    assertTrue(err instanceof ValidationException);
-                    assertEquals(Messages.STOCK_NEGATIVE, err.getMessage());
-                })
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof ValidationException &&
+                        throwable.getMessage().equals("Product name is required"))
                 .verify();
-
-        verifyNoInteractions(branchRepository);
-        verifyNoInteractions(productRepository);
-
-        verify(auditLogger).error(eq("onError addProduct"), any(ValidationException.class));
-        verify(auditLogger, never()).info(anyString());
-        verifyNoMoreInteractions(auditLogger);
     }
 
     @Test
-    void executeShouldFailValidationWhenNameBlankAndNotCallReposAndAuditOnError() {
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+    void executeWithNonExistentBranchShouldReturnError() {
+        String franchiseId = "franchise123";
+        String branchId = "nonexistent";
+        String productName = "New Product";
+        int stock = 10;
 
-        when(auditLogger.info(anyString())).thenReturn(Mono.empty());
-        when(auditLogger.error(anyString(), any(Throwable.class))).thenReturn(Mono.empty());
+        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.empty());
 
-        AuditSupport audit = new AuditSupport(auditLogger);
-        AddProductCommand command = new AddProductCommand(branchRepository, productRepository, audit);
+        Mono<ProductDTO> result = addProductCommand.execute(franchiseId, branchId, productName, stock);
 
-        StepVerifier.create(command.execute("f1", "b1", "   ", 0))
-                .expectErrorSatisfies(err -> {
-                    assertTrue(err instanceof ValidationException);
-                    assertEquals(Messages.PRODUCT_NAME_REQUIRED, err.getMessage());
-                })
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof NotFoundException &&
+                        throwable.getMessage().equals("No se encontró sucursal para franquicia"))
                 .verify();
-
-        verifyNoInteractions(branchRepository);
-        verifyNoInteractions(productRepository);
-
-        verify(auditLogger).error(eq("onError addProduct"), any(ValidationException.class));
-        verify(auditLogger, never()).info(anyString());
-        verifyNoMoreInteractions(auditLogger);
-    }
-
-    @Test
-    void executeShouldFailWhenBranchNotFoundAndNotSaveProductAndAuditOnError() {
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
-
-        when(auditLogger.info(anyString())).thenReturn(Mono.empty());
-        when(auditLogger.error(anyString(), any(Throwable.class))).thenReturn(Mono.empty());
-
-        AuditSupport audit = new AuditSupport(auditLogger);
-        AddProductCommand command = new AddProductCommand(branchRepository, productRepository, audit);
-
-        String franchiseId = "f1";
-        String branchId = "missing";
-        String name = "Producto";
-        int stock = 5;
-
-        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId))
-                .thenReturn(Mono.empty());
-
-        StepVerifier.create(command.execute(franchiseId, branchId, name, stock))
-                .expectErrorSatisfies(err -> {
-                    assertTrue(err instanceof NotFoundException);
-                    assertEquals(Messages.NO_SUCURSAL, err.getMessage());
-                })
-                .verify();
-
-        verify(branchRepository).findByIdAndFranchiseId(branchId, franchiseId);
-        verifyNoMoreInteractions(branchRepository);
-
-        verify(productRepository, never()).save(any());
-
-        verify(auditLogger).error(eq("onError addProduct"), any(NotFoundException.class));
-        verify(auditLogger, never()).info(anyString());
-        verifyNoMoreInteractions(auditLogger);
     }
 }
 

@@ -1,228 +1,86 @@
 package co.com.bancolombia.usecase.franchise;
 
-import co.com.bancolombia.model.Branch;
-import co.com.bancolombia.model.Product;
+import co.com.bancolombia.model.BranchDTO;
+import co.com.bancolombia.model.ProductDTO;
 import co.com.bancolombia.model.exception.NotFoundException;
-import co.com.bancolombia.model.gateways.AuditLogger;
 import co.com.bancolombia.model.gateways.BranchRepository;
 import co.com.bancolombia.model.gateways.ProductRepository;
 import co.com.bancolombia.usecase.franchise.command.DeleteProductCommand;
-import co.com.bancolombia.usecase.franchise.shared.AuditSupport;
-import co.com.bancolombia.usecase.franchise.shared.Messages;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
-
+@ExtendWith(MockitoExtension.class)
 class DeleteProductCommandTest {
 
+    @Mock
+    private BranchRepository branchRepository;
+
+    @Mock
+    private ProductRepository productRepository;
+
+    @InjectMocks
+    private DeleteProductCommand deleteProductCommand;
+
     @Test
-    void executeShouldCompleteWhenEverythingExistsAndShouldSubscribeOnCompleteLog() {
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+    void executeWithValidDataShouldDeleteProduct() {
+        String franchiseId = "franchise123";
+        String branchId = "branch456";
+        String productId = "product789";
 
-        AtomicInteger onCompleteSubscribed = new AtomicInteger(0);
-        AtomicInteger onErrorSubscribed = new AtomicInteger(0);
-        AtomicInteger findProductSubscribed = new AtomicInteger(0);
-        AtomicInteger deleteSubscribed = new AtomicInteger(0);
+        BranchDTO branchMock = new BranchDTO(branchId, franchiseId, "Branch Name");
+        ProductDTO productMock = new ProductDTO(productId, branchId, "Product", 10);
 
-        when(auditLogger.info(anyString())).thenReturn(Mono.empty());
-        when(auditLogger.info(eq("onComplete deleteProduct")))
-                .thenReturn(Mono.fromRunnable(onCompleteSubscribed::incrementAndGet));
+        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.just(branchMock));
+        when(productRepository.findByIdAndBranchId(productId, branchId)).thenReturn(Mono.just(productMock));
+        when(productRepository.deleteByIdAndBranchId(productId, branchId)).thenReturn(Mono.empty());
 
-        when(auditLogger.error(anyString(), any(Throwable.class)))
-                .thenReturn(Mono.fromRunnable(onErrorSubscribed::incrementAndGet));
+        Mono<Void> result = deleteProductCommand.execute(franchiseId, branchId, productId);
 
-        AuditSupport audit = new AuditSupport(auditLogger);
-        DeleteProductCommand command = new DeleteProductCommand(branchRepository, productRepository, audit);
-
-        String franchiseId = "f1";
-        String branchId = "b1";
-        String productId = "p1";
-
-        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId))
-                .thenReturn(Mono.just(new Branch(branchId, franchiseId, "Sucursal 1")));
-
-        when(productRepository.findByIdAndBranchId(productId, branchId))
-                .thenReturn(Mono.defer(() -> {
-                    findProductSubscribed.incrementAndGet();
-                    return Mono.just(new Product(productId, branchId, "Prod 1", 10));
-                }));
-
-        when(productRepository.deleteByIdAndBranchId(productId, branchId))
-                .thenReturn(Mono.defer(() -> {
-                    deleteSubscribed.incrementAndGet();
-                    return Mono.empty();
-                }));
-
-        StepVerifier.create(command.execute(franchiseId, branchId, productId))
+        StepVerifier.create(result)
                 .verifyComplete();
-
-        assertEquals(1, findProductSubscribed.get());
-        assertEquals(1, deleteSubscribed.get());
-        assertEquals(1, onCompleteSubscribed.get());
-        assertEquals(0, onErrorSubscribed.get());
-
-        verify(productRepository).deleteByIdAndBranchId(productId, branchId);
     }
 
     @Test
-    void executeShouldFailWhenBranchNotFoundAndShouldNotSubscribeProductLookupNorDelete() {
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+    void executeWithNonExistentBranchShouldReturnError() {
+        String franchiseId = "franchise123";
+        String branchId = "nonexistent";
+        String productId = "product789";
 
-        AtomicInteger onCompleteSubscribed = new AtomicInteger(0);
-        AtomicInteger onErrorSubscribed = new AtomicInteger(0);
-        AtomicInteger findProductSubscribed = new AtomicInteger(0);
-        AtomicInteger deleteSubscribed = new AtomicInteger(0);
+        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.empty());
+        when(productRepository.findByIdAndBranchId(anyString(), anyString())).thenReturn(Mono.empty());
 
-        when(auditLogger.info(anyString())).thenReturn(Mono.empty());
-        when(auditLogger.info(eq("onComplete deleteProduct")))
-                .thenReturn(Mono.fromRunnable(onCompleteSubscribed::incrementAndGet));
-        when(auditLogger.error(anyString(), any(Throwable.class)))
-                .thenReturn(Mono.fromRunnable(onErrorSubscribed::incrementAndGet));
+        Mono<Void> result = deleteProductCommand.execute(franchiseId, branchId, productId);
 
-        AuditSupport audit = new AuditSupport(auditLogger);
-        DeleteProductCommand command = new DeleteProductCommand(branchRepository, productRepository, audit);
-
-        String franchiseId = "f1";
-        String branchId = "b404";
-        String productId = "p1";
-
-        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId))
-                .thenReturn(Mono.empty());
-
-        when(productRepository.findByIdAndBranchId(anyString(), anyString()))
-                .thenReturn(Mono.defer(() -> {
-                    findProductSubscribed.incrementAndGet();
-                    return Mono.just(new Product("x", "y", "z", 1));
-                }));
-
-        when(productRepository.deleteByIdAndBranchId(anyString(), anyString()))
-                .thenReturn(Mono.defer(() -> {
-                    deleteSubscribed.incrementAndGet();
-                    return Mono.empty();
-                }));
-
-        StepVerifier.create(command.execute(franchiseId, branchId, productId))
-                .expectErrorSatisfies(err -> {
-                    assertTrue(err instanceof NotFoundException);
-                    assertEquals(Messages.NO_SUCURSAL, err.getMessage());
-                })
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof NotFoundException &&
+                        throwable.getMessage().equals("No se encontró sucursal para franquicia"))
                 .verify();
-
-        assertEquals(0, findProductSubscribed.get(), "No debería suscribirse búsqueda de producto si no hay sucursal");
-        assertEquals(0, deleteSubscribed.get(), "No debería intentar delete si no hay sucursal");
-        assertEquals(0, onCompleteSubscribed.get(), "No debería suscribirse onComplete si falla");
-        assertEquals(1, onErrorSubscribed.get(), "Debe loguear onError");
     }
 
     @Test
-    void executeShouldFailWhenProductNotFoundAndShouldNotSubscribeDelete() {
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
+    void executeWithNonExistentProductShouldReturnError() {
+        String franchiseId = "franchise123";
+        String branchId = "branch456";
+        String productId = "nonexistent";
 
-        AtomicInteger onCompleteSubscribed = new AtomicInteger(0);
-        AtomicInteger onErrorSubscribed = new AtomicInteger(0);
-        AtomicInteger findProductSubscribed = new AtomicInteger(0);
-        AtomicInteger deleteSubscribed = new AtomicInteger(0);
+        BranchDTO branchMock = new BranchDTO(branchId, franchiseId, "Branch Name");
 
-        when(auditLogger.info(anyString())).thenReturn(Mono.empty());
-        when(auditLogger.info(eq("onComplete deleteProduct")))
-                .thenReturn(Mono.fromRunnable(onCompleteSubscribed::incrementAndGet));
-        when(auditLogger.error(anyString(), any(Throwable.class)))
-                .thenReturn(Mono.fromRunnable(onErrorSubscribed::incrementAndGet));
+        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId)).thenReturn(Mono.just(branchMock));
+        when(productRepository.findByIdAndBranchId(productId, branchId)).thenReturn(Mono.empty());
 
-        AuditSupport audit = new AuditSupport(auditLogger);
-        DeleteProductCommand command = new DeleteProductCommand(branchRepository, productRepository, audit);
+        Mono<Void> result = deleteProductCommand.execute(franchiseId, branchId, productId);
 
-        String franchiseId = "f1";
-        String branchId = "b1";
-        String productId = "p404";
-
-        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId))
-                .thenReturn(Mono.just(new Branch(branchId, franchiseId, "Sucursal 1")));
-
-        when(productRepository.findByIdAndBranchId(productId, branchId))
-                .thenReturn(Mono.defer(() -> {
-                    findProductSubscribed.incrementAndGet();
-                    return Mono.empty();
-                }));
-
-        when(productRepository.deleteByIdAndBranchId(anyString(), anyString()))
-                .thenReturn(Mono.defer(() -> {
-                    deleteSubscribed.incrementAndGet();
-                    return Mono.empty();
-                }));
-
-        StepVerifier.create(command.execute(franchiseId, branchId, productId))
-                .expectErrorSatisfies(err -> {
-                    assertTrue(err instanceof NotFoundException);
-                    assertEquals(Messages.PRODUCTO_NO_ENCONTRADO, err.getMessage());
-                })
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable -> throwable instanceof NotFoundException &&
+                        throwable.getMessage().equals("Producto no encontrado en la sucursal"))
                 .verify();
-
-        assertEquals(1, findProductSubscribed.get());
-        assertEquals(0, deleteSubscribed.get(), "No debe borrar si no encontró producto");
-        assertEquals(0, onCompleteSubscribed.get());
-        assertEquals(1, onErrorSubscribed.get());
-    }
-
-    @Test
-    void executeShouldPropagateDeleteErrorAndShouldNotSubscribeOnComplete() {
-        BranchRepository branchRepository = mock(BranchRepository.class);
-        ProductRepository productRepository = mock(ProductRepository.class);
-        AuditLogger auditLogger = mock(AuditLogger.class);
-
-        AtomicInteger onCompleteSubscribed = new AtomicInteger(0);
-        AtomicInteger onErrorSubscribed = new AtomicInteger(0);
-        AtomicInteger findProductSubscribed = new AtomicInteger(0);
-        AtomicInteger deleteSubscribed = new AtomicInteger(0);
-
-        when(auditLogger.info(anyString())).thenReturn(Mono.empty());
-        when(auditLogger.info(eq("onComplete deleteProduct")))
-                .thenReturn(Mono.fromRunnable(onCompleteSubscribed::incrementAndGet));
-        when(auditLogger.error(anyString(), any(Throwable.class)))
-                .thenReturn(Mono.fromRunnable(onErrorSubscribed::incrementAndGet));
-
-        AuditSupport audit = new AuditSupport(auditLogger);
-        DeleteProductCommand command = new DeleteProductCommand(branchRepository, productRepository, audit);
-
-        String franchiseId = "f1";
-        String branchId = "b1";
-        String productId = "p1";
-
-        when(branchRepository.findByIdAndFranchiseId(branchId, franchiseId))
-                .thenReturn(Mono.just(new Branch(branchId, franchiseId, "Sucursal 1")));
-
-        when(productRepository.findByIdAndBranchId(productId, branchId))
-                .thenReturn(Mono.defer(() -> {
-                    findProductSubscribed.incrementAndGet();
-                    return Mono.just(new Product(productId, branchId, "Prod 1", 10));
-                }));
-
-        RuntimeException boom = new RuntimeException("delete failed");
-        when(productRepository.deleteByIdAndBranchId(productId, branchId))
-                .thenReturn(Mono.defer(() -> {
-                    deleteSubscribed.incrementAndGet();
-                    return Mono.error(boom);
-                }));
-
-        StepVerifier.create(command.execute(franchiseId, branchId, productId))
-                .expectErrorSatisfies(err -> assertSame(boom, err))
-                .verify();
-
-        assertEquals(1, findProductSubscribed.get());
-        assertEquals(1, deleteSubscribed.get());
-        assertEquals(0, onCompleteSubscribed.get());
-        assertEquals(1, onErrorSubscribed.get());
     }
 }

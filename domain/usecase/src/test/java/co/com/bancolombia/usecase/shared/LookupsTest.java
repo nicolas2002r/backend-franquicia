@@ -1,8 +1,8 @@
 package co.com.bancolombia.usecase.shared;
 
-import co.com.bancolombia.model.Branch;
-import co.com.bancolombia.model.Franchise;
-import co.com.bancolombia.model.Product;
+import co.com.bancolombia.model.BranchDTO;
+import co.com.bancolombia.model.FranchiseDTO;
+import co.com.bancolombia.model.ProductDTO;
 import co.com.bancolombia.model.exception.NotFoundException;
 import co.com.bancolombia.model.gateways.BranchRepository;
 import co.com.bancolombia.model.gateways.FranchiseRepository;
@@ -23,7 +23,7 @@ class LookupsTest {
     @Test
     void requireFranchiseShouldReturnFranchiseWhenFound() {
         FranchiseRepository repo = mock(FranchiseRepository.class);
-        Franchise franchise = new Franchise("f1", "Franquicia A");
+        FranchiseDTO franchise = new FranchiseDTO("f1", "Franquicia A");
 
         when(repo.findById("f1")).thenReturn(Mono.just(franchise));
 
@@ -54,7 +54,7 @@ class LookupsTest {
     @Test
     void requireBranchShouldReturnBranchWhenFound() {
         BranchRepository repo = mock(BranchRepository.class);
-        Branch branch = new Branch("b1", "f1", "Sucursal 1");
+        BranchDTO branch = new BranchDTO("b1", "f1", "Sucursal 1");
 
         when(repo.findByIdAndFranchiseId("b1", "f1")).thenReturn(Mono.just(branch));
 
@@ -85,7 +85,7 @@ class LookupsTest {
     @Test
     void requireProductShouldReturnProductWhenFound() {
         ProductRepository repo = mock(ProductRepository.class);
-        Product product = new Product("p1", "b1", "Producto 1", 10);
+        ProductDTO product = new ProductDTO("p1", "b1", "Producto 1", 10);
 
         when(repo.findByIdAndBranchId("p1", "b1")).thenReturn(Mono.just(product));
 

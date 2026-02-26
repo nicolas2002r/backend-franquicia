@@ -5,7 +5,7 @@ import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-public interface ReactiveBranchMongoRepository extends ReactiveMongoRepository<BranchDocument, String> {
+public interface BranchRepository extends ReactiveMongoRepository<BranchDocument, String> {
     Mono<BranchDocument> findByIdAndFranchiseId(String id, String franchiseId);
     Flux<BranchDocument> findByFranchiseId(String franchiseId);
 }
